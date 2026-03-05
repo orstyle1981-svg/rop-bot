@@ -5,7 +5,8 @@ from datetime import datetime, timedelta
 
 import asyncpg
 from aiogram import Bot, Dispatcher, types
-from aiogram.filters import Command
+from aiogram import types
+from aiogram.dispatcher import filters
 from aiogram.types import LabeledPrice, PreCheckoutQuery
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
@@ -222,4 +223,5 @@ async def main():
         await bot.session.close()
 
 if __name__ == "__main__":
+
     asyncio.run(main())
