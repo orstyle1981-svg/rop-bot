@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 
 import asyncpg
 from aiogram import Bot, Dispatcher, types
-from aiogram import types
+from aiogram.contrib.fsm_storage.memory import MemoryStorage
 from aiogram.dispatcher import filters
 from aiogram.types import LabeledPrice, PreCheckoutQuery
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
@@ -23,7 +23,8 @@ SUBSCRIPTION_DAYS = 30  # срок подписки в днях
 # ===== ИНИЦИАЛИЗАЦИЯ =====
 logging.basicConfig(level=logging.INFO)
 bot = Bot(token=BOT_TOKEN)
-dp = Dispatcher()
+storage = MemoryStorage()
+dp = Dispatcher(bot, storage=storage)
 
 # ===== БАЗА ДАННЫХ (POSTGRESQL) =====
 async def init_db():
@@ -68,7 +69,7 @@ async def delete_subscription(user_id: int):
     await conn.close()
 
 # ===== ОБРАБОТЧИКИ КОМАНД =====
-@dp.message(Command("start"))
+@dp.message_handler(commands=['start'])
 async def cmd_start(message: types.Message):
     """Приветственное сообщение с инлайн-кнопкой «Купить»."""
     keyboard = InlineKeyboardMarkup(
@@ -94,13 +95,13 @@ async def cmd_start(message: types.Message):
         parse_mode="Markdown"
     )
 
-@dp.callback_query(lambda c: c.data == 'buy')
+@dp.callback_query_handler(lambda c: c.data == 'buy')
 async def process_buy_callback(callback_query: types.CallbackQuery):
     """Обработчик нажатия кнопки «Купить» — отправляет счёт."""
     await bot.answer_callback_query(callback_query.id)
     await send_invoice(callback_query.from_user.id)
 
-@dp.message(Command("buy"))
+@dp.message_handler(commands=['buy'])
 async def cmd_buy(message: types.Message):
     """Команда /buy (на случай, если пользователь введёт вручную)."""
     await send_invoice(message.from_user.id)
@@ -134,18 +135,18 @@ async def send_invoice(chat_id: int):
         reply_markup=keyboard
     )
 
-@dp.callback_query(lambda c: c.data == 'cancel_payment')
+@dp.callback_query_handler(lambda c: c.data == 'cancel_payment')
 async def process_cancel_callback(callback_query: types.CallbackQuery):
     """Отмена оплаты."""
     await bot.answer_callback_query(callback_query.id)
     await bot.send_message(callback_query.from_user.id, "❌ Оплата отменена.")
 
-@dp.pre_checkout_query()
+@dp.pre_checkout_query_handler()
 async def pre_checkout_handler(query: PreCheckoutQuery):
     """Обязательный обработчик предоплаты."""
     await query.answer(ok=True)
 
-@dp.message(lambda message: message.successful_payment is not None)
+@dp.message_handler(content_types=types.ContentType.SUCCESSFUL_PAYMENT)
 async def successful_payment_handler(message: types.Message):
     """Обработка успешной оплаты."""
     user_id = message.from_user.id
@@ -166,7 +167,7 @@ async def successful_payment_handler(message: types.Message):
     )
 
 # ===== МГНОВЕННЫЙ КИК НЕПЛАТЕЛЬЩИКОВ ПРИ ВХОДЕ =====
-@dp.chat_member()
+@dp.chat_member_handler()
 async def on_user_join(event: types.ChatMemberUpdated):
     """Проверяет подписку при входе в группу и кикает, если её нет."""
     # Проверяем, что событие — присоединение нового участника
@@ -216,12 +217,11 @@ async def main():
         logging.info("Запуск фоновой задачи...")
         asyncio.create_task(subscription_checker())
         logging.info("Запуск polling...")
-        await dp.start_polling(bot)
+        await dp.start_polling()
     except Exception as e:
         logging.exception("Критическая ошибка в main")
     finally:
         await bot.session.close()
 
 if __name__ == "__main__":
-
     asyncio.run(main())
