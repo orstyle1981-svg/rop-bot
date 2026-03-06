@@ -3,6 +3,9 @@ import logging
 import os
 from datetime import datetime, timedelta
 
+# Добавляем импорт aiohttp для HTTP-сервера
+from aiohttp import web
+
 import asyncpg
 from aiogram import Bot, Dispatcher, types
 from aiogram.contrib.fsm_storage.memory import MemoryStorage
@@ -15,6 +18,7 @@ BOT_TOKEN = os.getenv("BOT_TOKEN")
 PROVIDER_TOKEN = os.getenv("PROVIDER_TOKEN")
 GROUP_ID = int(os.getenv("GROUP_ID"))  # ID группы (с минусом)
 DATABASE_URL = os.getenv("DATABASE_URL")  # PostgreSQL DSN
+PORT = int(os.getenv("PORT", 10000))  # Порт для Render (по умолчанию 10000)
 
 # Цена в копейках (400 рублей = 40000 копеек)
 PRICE_AMOUNT = 40000
@@ -121,7 +125,7 @@ async def send_invoice(chat_id: int):
                         "value": f"{PRICE_AMOUNT/100:.2f}",  # 400.00
                         "currency": "RUB"
                     },
-                    "vat_code": 1,                       # ставка НДС (1 = без НДС, как вы указали)
+                    "vat_code": 1,                       # ставка НДС (1 = без НДС)
                     "payment_mode": "full_prepayment",    # признак способа расчёта
                     "payment_subject": "commodity"        # признак предмета расчёта (товар)
                 }
@@ -225,14 +229,32 @@ async def subscription_checker():
             except Exception as e:
                 logging.error(f"Ошибка при удалении {user_id}: {e}")
 
+# ===== ПРОСТОЙ HTTP-СЕРВЕР ДЛЯ RENDER =====
+async def handle_health(request):
+    """Обработчик для проверки здоровья от Render."""
+    return web.Response(text="OK")
+
+async def run_web_server():
+    """Запускает aiohttp сервер на указанном порту."""
+    app = web.Application()
+    app.router.add_get("/", handle_health)
+    app.router.add_get("/health", handle_health)
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, "0.0.0.0", PORT)
+    logging.info(f"Запуск HTTP-сервера на порту {PORT} для проверок Render")
+    await site.start()
+
 # ===== ЗАПУСК =====
 async def main():
-    """Главная функция запуска бота."""
+    """Главная функция запуска бота и HTTP-сервера."""
     try:
         logging.info("Инициализация базы данных...")
         await init_db()
         logging.info("Запуск фоновой задачи...")
         asyncio.create_task(subscription_checker())
+        # Запускаем HTTP-сервер параллельно с ботом
+        asyncio.create_task(run_web_server())
         logging.info("Запуск polling...")
         await dp.start_polling()
     except Exception as e:
@@ -242,3 +264,4 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+
