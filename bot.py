@@ -107,8 +107,28 @@ async def cmd_buy(message: types.Message):
     await send_invoice(message.from_user.id)
 
 async def send_invoice(chat_id: int):
-    """Отправляет инвойс с кнопкой оплаты."""
+    """Отправляет инвойс с кнопкой оплаты и данными для чека."""
     prices = [LabeledPrice(label="Подписка на 1 месяц", amount=PRICE_AMOUNT)]
+
+    # Данные для чека в соответствии с 54-ФЗ и вашими налоговыми параметрами
+    receipt_data = {
+        "receipt": {
+            "items": [
+                {
+                    "description": "Подписка на 1 месяц",
+                    "quantity": 1.0,
+                    "amount": {
+                        "value": f"{PRICE_AMOUNT/100:.2f}",  # 400.00
+                        "currency": "RUB"
+                    },
+                    "vat_code": 1,                       # ставка НДС (1 = без НДС, как вы указали)
+                    "payment_mode": "full_prepayment",    # признак способа расчёта
+                    "payment_subject": "commodity"        # признак предмета расчёта (товар)
+                }
+            ],
+            "tax_system_code": 3                          # 3 = доходы минус расходы (УСН)
+        }
+    }
 
     # Инлайн-кнопка «Оплатить» (pay=True) и кнопка отмены
     keyboard = InlineKeyboardMarkup(
@@ -127,11 +147,8 @@ async def send_invoice(chat_id: int):
         currency="RUB",
         prices=prices,
         start_parameter="subscription",
-        need_name=False,
-        need_email=False,
-        need_phone_number=False,
-        need_shipping_address=False,
-        is_flexible=False,
+        need_email=True,                     # запрашиваем email для отправки электронного чека
+        provider_data=receipt_data,           # передаём фискальные данные в ЮKassa
         reply_markup=keyboard
     )
 
