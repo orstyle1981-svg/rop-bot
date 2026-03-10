@@ -3,9 +3,7 @@ import logging
 import os
 from datetime import datetime, timedelta
 
-# Добавляем импорт aiohttp для HTTP-сервера
 from aiohttp import web
-
 import asyncpg
 from aiogram import Bot, Dispatcher, types
 from aiogram.contrib.fsm_storage.memory import MemoryStorage
@@ -75,10 +73,15 @@ async def delete_subscription(user_id: int):
 # ===== ОБРАБОТЧИКИ КОМАНД =====
 @dp.message_handler(commands=['start'])
 async def cmd_start(message: types.Message):
-    """Приветственное сообщение с инлайн-кнопкой «Купить»."""
+    """Приветственное сообщение с инлайн-кнопками."""
     keyboard = InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="💳 Купить подписку 400 ₽", callback_data="buy")]
+            [InlineKeyboardButton(text="💳 Купить подписку 400 ₽", callback_data="buy")],
+            [
+                InlineKeyboardButton(text="🔐 Политика обработки данных", callback_data="policy"),
+                InlineKeyboardButton(text="🔄 Перезапуск", callback_data="restart")
+            ],
+            [InlineKeyboardButton(text="🆘 Поддержка @GETOURS_support", url="https://t.me/GETOURS_support")]
         ]
     )
     await message.answer(
@@ -99,11 +102,45 @@ async def cmd_start(message: types.Message):
         parse_mode="Markdown"
     )
 
+@dp.message_handler(commands=['policy'])
+async def cmd_policy(message: types.Message):
+    """Отправляет текст политики обработки данных."""
+    policy_text = (
+        "🔐 **Политика обработки данных**\n\n"
+        "Чат-бот @QA_Delfi_bot используется для предоставления доступа к закрытому каналу «РОП: рабочие вопросы».\n\n"
+        "**Оператор:**\n"
+        "Беляева Наталья Сергеевна\n"
+        "ИНН 470604654570\n\n"
+        "**Какие данные используются**\n"
+        "Чат-бот не запрашивает и не собирает персональные данные пользователей.\n\n"
+        "При оформлении доступа к каналу оплата может осуществляться через сторонние платежные сервисы. Такие сервисы могут обрабатывать данные пользователя (например, адрес электронной почты) для оформления платежа и направления кассового чека в соответствии со своей политикой обработки персональных данных.\n\n"
+        "**Цель использования данных**\n"
+        "Данные используются исключительно для:\n"
+        "• оформления оплаты доступа\n"
+        "• направления кассовых чеков\n"
+        "• предоставления доступа к закрытому каналу «РОП: рабочие вопросы»\n\n"
+        "**Согласие пользователя**\n"
+        "Продолжая использование чат-бота, пользователь подтверждает согласие с настоящими условиями."
+    )
+    await message.answer(policy_text, parse_mode="Markdown")
+
 @dp.callback_query_handler(lambda c: c.data == 'buy')
 async def process_buy_callback(callback_query: types.CallbackQuery):
     """Обработчик нажатия кнопки «Купить» — отправляет счёт."""
     await bot.answer_callback_query(callback_query.id)
     await send_invoice(callback_query.from_user.id)
+
+@dp.callback_query_handler(lambda c: c.data == 'policy')
+async def process_policy_callback(callback_query: types.CallbackQuery):
+    """Обработчик нажатия кнопки «Политика»."""
+    await bot.answer_callback_query(callback_query.id)
+    await cmd_policy(callback_query.message)  # используем тот же метод, что и для команды /policy
+
+@dp.callback_query_handler(lambda c: c.data == 'restart')
+async def process_restart_callback(callback_query: types.CallbackQuery):
+    """Обработчик нажатия кнопки «Перезапуск» — просто запускает /start."""
+    await bot.answer_callback_query(callback_query.id)
+    await cmd_start(callback_query.message)
 
 @dp.message_handler(commands=['buy'])
 async def cmd_buy(message: types.Message):
@@ -114,7 +151,7 @@ async def send_invoice(chat_id: int):
     """Отправляет инвойс с кнопкой оплаты и данными для чека."""
     prices = [LabeledPrice(label="Подписка на 1 месяц", amount=PRICE_AMOUNT)]
 
-    # Данные для чека в соответствии с 54-ФЗ и вашими налоговыми параметрами
+    # Данные для чека
     receipt_data = {
         "receipt": {
             "items": [
@@ -122,15 +159,15 @@ async def send_invoice(chat_id: int):
                     "description": "Подписка на 1 месяц",
                     "quantity": 1.0,
                     "amount": {
-                        "value": f"{PRICE_AMOUNT/100:.2f}",  # 400.00
+                        "value": f"{PRICE_AMOUNT/100:.2f}",
                         "currency": "RUB"
                     },
-                    "vat_code": 1,                       # ставка НДС (1 = без НДС)
-                    "payment_mode": "full_prepayment",    # признак способа расчёта
-                    "payment_subject": "commodity"        # признак предмета расчёта (товар)
+                    "vat_code": 1,
+                    "payment_mode": "full_prepayment",
+                    "payment_subject": "commodity"
                 }
             ],
-            "tax_system_code": 3                          # 3 = доходы минус расходы (УСН)
+            "tax_system_code": 3
         }
     }
 
@@ -151,8 +188,8 @@ async def send_invoice(chat_id: int):
         currency="RUB",
         prices=prices,
         start_parameter="subscription",
-        need_email=True,                     # запрашиваем email для отправки электронного чека
-        provider_data=receipt_data,           # передаём фискальные данные в ЮKassa
+        need_email=True,
+        provider_data=receipt_data,
         reply_markup=keyboard
     )
 
