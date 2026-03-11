@@ -203,7 +203,8 @@ async def process_cancel_callback(callback_query: types.CallbackQuery):
 @dp.pre_checkout_query_handler()
 async def pre_checkout_handler(query: PreCheckoutQuery):
     """Обязательный обработчик предоплаты."""
-    await query.answer(ok=True)
+    # Правильный способ для aiogram 2.x
+    await bot.answer_pre_checkout_query(query.id, ok=True)
 
 @dp.message_handler(content_types=types.ContentType.SUCCESSFUL_PAYMENT)
 async def successful_payment_handler(message: types.Message):
@@ -287,6 +288,9 @@ async def run_web_server():
 async def main():
     """Главная функция запуска бота и HTTP-сервера."""
     try:
+        # Принудительно сбрасываем вебхук, чтобы избежать конфликтов
+        await bot.delete_webhook(drop_pending_updates=True)
+
         logging.info("Инициализация базы данных...")
         await init_db()
         logging.info("Запуск фоновой задачи...")
