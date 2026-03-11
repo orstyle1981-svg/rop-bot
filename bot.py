@@ -89,7 +89,7 @@ async def cmd_start(message: types.Message):
         "Это бот доступа в закрытый чат «РОП: рабочие вопросы».\n\n"
         "В чате разбираем реальные ситуации из практики отчётности РОП.\n"
         "На вопросы отвечают ведущие эксперты РФ в сфере РОП:\n"
-        "Н. Беляева, и другие специалисты.\n\n"
+        "Н. Беляева эксперт-эколог, руководитель правового экспертного бюро Дельфи.\n\n"
         "**Здесь можно:**\n"
         "• задать вопрос по отчётности РОП\n"
         "• обсудить проверки РПН\n"
@@ -134,13 +134,14 @@ async def process_buy_callback(callback_query: types.CallbackQuery):
 async def process_policy_callback(callback_query: types.CallbackQuery):
     """Обработчик нажатия кнопки «Политика»."""
     await bot.answer_callback_query(callback_query.id)
-    await cmd_policy(callback_query.message)  # используем тот же метод, что и для команды /policy
+    await cmd_policy(callback_query.message)
 
 @dp.callback_query_handler(lambda c: c.data == 'restart')
 async def process_restart_callback(callback_query: types.CallbackQuery):
     """Обработчик нажатия кнопки «Перезапуск» — просто запускает /start."""
-    await bot.answer_callback_query(callback_query.id)
+    # Сначала выполняем основное действие, потом отвечаем на callback
     await cmd_start(callback_query.message)
+    await bot.answer_callback_query(callback_query.id)
 
 @dp.message_handler(commands=['buy'])
 async def cmd_buy(message: types.Message):
@@ -301,4 +302,3 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
-
