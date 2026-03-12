@@ -189,7 +189,8 @@ async def send_invoice(chat_id: int):
         currency="RUB",
         prices=prices,
         start_parameter="subscription",
-        need_email=True,
+        need_email=True,                     # запрашиваем email у пользователя
+        send_email_to_provider=True,          # передаём email в ЮKassa для чека
         provider_data=receipt_data,
         reply_markup=keyboard
     )
