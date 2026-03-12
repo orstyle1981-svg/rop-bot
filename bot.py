@@ -77,6 +77,7 @@ async def cmd_start(message: types.Message):
     keyboard = InlineKeyboardMarkup(
         inline_keyboard=[
             [InlineKeyboardButton(text="💳 Купить подписку 400 ₽", callback_data="buy")],
+            [InlineKeyboardButton(text="🔗 Получить ссылку (если есть подписка)", callback_data="getlink")],
             [
                 InlineKeyboardButton(text="🔐 Политика обработки данных", callback_data="policy"),
                 InlineKeyboardButton(text="🔄 Перезапуск", callback_data="restart")
@@ -97,7 +98,8 @@ async def cmd_start(message: types.Message):
         "• разобрать рабочую ситуацию с коллегами\n\n"
         "Также можно задать вопросы по курсу «РОП: с нуля до Pro для новичков».\n\n"
         "**Доступ предоставляется по подписке 400 ₽ / 30 дней.**\n"
-        "После оплаты бот автоматически отправит ссылку для входа в чат.",
+        "После оплаты бот автоматически отправит ссылку для входа в чат.\n\n"
+        "Если у вас уже есть подписка, нажмите кнопку «Получить ссылку».",
         reply_markup=keyboard,
         parse_mode="Markdown"
     )
@@ -124,6 +126,34 @@ async def cmd_policy(message: types.Message):
     )
     await message.answer(policy_text, parse_mode="Markdown")
 
+@dp.message_handler(commands=['getlink'])
+async def cmd_getlink(message: types.Message):
+    """Выдаёт новую ссылку для входа, если подписка активна."""
+    user_id = message.from_user.id
+    expires_at = await get_subscription(user_id)
+
+    if expires_at is None:
+        await message.answer("⛔ У вас нет активной подписки. Оформите через /buy")
+        return
+
+    if expires_at < datetime.now():
+        await message.answer("⏳ Срок подписки истёк. Продлите через /buy")
+        return
+
+    # Создаём новую одноразовую ссылку
+    invite_link = await bot.create_chat_invite_link(
+        chat_id=GROUP_ID,
+        member_limit=1,
+        name=f"user_{user_id}"
+    )
+
+    await message.answer(
+        f"✅ Ваша подписка активна до {expires_at.strftime('%d.%m.%Y')}.\n"
+        f"Новая ссылка для входа в группу (действует 7 дней, одна активация):\n"
+        f"{invite_link.invite_link}\n\n"
+        f"Не передавайте ссылку никому."
+    )
+
 @dp.callback_query_handler(lambda c: c.data == 'buy')
 async def process_buy_callback(callback_query: types.CallbackQuery):
     """Обработчик нажатия кнопки «Купить» — отправляет счёт."""
@@ -142,6 +172,12 @@ async def process_restart_callback(callback_query: types.CallbackQuery):
     # Сначала выполняем основное действие, потом отвечаем на callback
     await cmd_start(callback_query.message)
     await bot.answer_callback_query(callback_query.id)
+
+@dp.callback_query_handler(lambda c: c.data == 'getlink')
+async def process_getlink_callback(callback_query: types.CallbackQuery):
+    """Обработчик нажатия кнопки «Получить ссылку»."""
+    await bot.answer_callback_query(callback_query.id)
+    await cmd_getlink(callback_query.message)
 
 @dp.message_handler(commands=['buy'])
 async def cmd_buy(message: types.Message):
